@@ -11,7 +11,7 @@ import os
 import sys
 from datetime import date
 from docx import Document
-from docx.shared import Inches
+from docx.shared import Inches, Pt
 from docx.oxml.ns import qn
 from docx.oxml import OxmlElement
 from docx.enum.text import WD_PARAGRAPH_ALIGNMENT
@@ -29,6 +29,7 @@ class MyPrinter:
         self._db_name = _core.db_name
         self._log = _core.log
         self._utils = _core.utils
+        self._export = _core.export
         self._db_config = _details.db_config
         self._db_tables = _details.db_tables
         self._properties = self._set_properties()
@@ -41,7 +42,12 @@ class MyPrinter:
         :return: list of properties
         :rtype: list(any)
         """
-        return ('Owner', 'Fujitsu ECS'), ('Version', '1.0'), ('Created on', date.today().strftime("%Y-%m-%d"))
+        return [['Owner', 'ECS'],
+                ['Author', 'Michał Paradowski'],
+                ['E-mail', 'michal.paradowski@fujitsu.com'],
+                ['Version', '1.0'],
+                ['Status', 'Final'],
+                ['Created on', date.today().strftime("%Y-%m-%d")]]
 
     def _print_document(self):
         """
@@ -59,13 +65,7 @@ class MyPrinter:
         header_paragraph = header.paragraphs[0]
         run = header_paragraph.add_run()
         run.add_picture(_logo_path, width=Inches(1.0))
-        run.add_text(f" [{self._db_name}] SQDoc v1.0 by michal.paradowski@outlook.com.")
-
-        footer = section.footer
-        footer_paragraph = footer.paragraphs[0]
-        footer_paragraph.text = "Page "
-        footer_paragraph.add_run().field_code = 'PAGE '
-        footer_paragraph.add_run().field_code = 'NUMPAGES'
+        run.add_text(f" {self._db_name} database technical documentation")
 
         # Add page numbers to each section's footer
         for section in doc.sections:
@@ -75,7 +75,6 @@ class MyPrinter:
         # main page
         # ---------------------------------------------------------------------------------
         doc.add_heading(f'{self._db_name} database technical documentation', 0)
-
         # document details table
         table = doc.add_table(rows=1, cols=2)
         table.style = 'Light List Accent 1'
@@ -86,10 +85,10 @@ class MyPrinter:
         # column dimensions
         theader[0].width = Inches(2)
         theader[1].width = Inches(2)
-        for item, detail in self._properties:
+        for item in self._properties:
             row = table.add_row().cells
-            row[0].text = item
-            row[1].text = detail
+            row[0].text = item[0]
+            row[1].text = item[1]
             # column dimensions
             row[0].width = Inches(2)
             row[1].width = Inches(2)
@@ -218,8 +217,31 @@ class MyPrinter:
                     row[1].width = Inches(2)
                     row[2].width = Inches(2)
 
+            # section - extended properties
+            doc.add_heading(f"3.{paragraph}.2 Extended properties", level=3)
+            if len(content['extended']) == 0:
+                doc.add_paragraph(f'No extended properties configured for this table.')
+            else:
+                # create table
+                table = doc.add_table(rows=1, cols=2)
+                table.autofit = False
+                table.style = 'Light List Accent 1'
+                theader = table.rows[0].cells
+                # header text
+                theader[0].text = 'Property name'
+                theader[1].text = 'Property value'
+                # column dimensions
+                theader[0].width = Inches(2)
+                theader[1].width = Inches(4)
+                for key in content['extended']:
+                    row = table.add_row().cells
+                    row[0].text = key[0]
+                    row[1].text = key[1]
+                    row[0].width = Inches(2)
+                    row[1].width = Inches(4)
+
             # section - columns
-            doc.add_heading(f"3.{paragraph}.2 Columns", level=3)
+            doc.add_heading(f"3.{paragraph}.3 Columns", level=3)
             # create table
             table = doc.add_table(rows=1, cols=4)
             table.autofit = False
@@ -229,7 +251,7 @@ class MyPrinter:
             theader[0].text = 'Column name'
             theader[1].text = 'Data type'
             theader[2].text = 'Max length'
-            theader[3].text = 'Accept NULL'
+            theader[3].text = 'Null-able'
             # column dimensions
             theader[0].width = Inches(2)
             theader[1].width = Inches(2)
@@ -249,38 +271,40 @@ class MyPrinter:
             paragraph += 1
 
         # Save the document
-        doc.save('C:\\Users\\ParadowskiM\\OneDrive - FUJITSU\\Desktop\\example.docx')
+        path = f"{self._export}\\{self._db_name}_documentation.docx"
+        print(f"{self._utils.timestamp()} Saving file: {path}")
+        doc.save(path)
         print()
 
     @staticmethod
     def _add_toc(paragraph):
         """
-        Buol
-        :param paragraph:
-        :return:
+        Build table of content.
+        :param paragraph: current page paragraph object
+        :type paragraph: doc.add_paragraph()
+        :return: modified paragraph with table of content configuration
+        :rtype: doc.add_paragraph()
         """
         run = paragraph.add_run()
-        fldChar = OxmlElement('w:fldChar')  # creates a new element
-        fldChar.set(qn('w:fldCharType'), 'begin')  # sets attribute on element
-        instrText = OxmlElement('w:instrText')
-        instrText.set(qn('xml:space'), 'preserve')  # sets attribute on element
-        instrText.text = 'TOC \\o "1-3" \\h \\z \\u'  # change 1-3 depending on heading levels you need
-
-        fldChar2 = OxmlElement('w:fldChar')
-        fldChar2.set(qn('w:fldCharType'), 'separate')
-        fldChar3 = OxmlElement('w:updateFields')
-        fldChar3.set(qn('w:val'), 'true')
-
-        fldChar4 = OxmlElement('w:fldChar')
-        fldChar4.set(qn('w:fldCharType'), 'end')
-
+        char = OxmlElement('w:fldChar')
+        char.set(qn('w:fldCharType'), 'begin')
+        instr = OxmlElement('w:instrText')
+        instr.set(qn('xml:space'), 'preserve')
+        instr.text = 'TOC \\o "1-3" \\h \\z \\u'
+        # ---
+        char_ext_1 = OxmlElement('w:fldChar')
+        char_ext_1.set(qn('w:fldCharType'), 'separate')
+        char_ext_2 = OxmlElement('w:updateFields')
+        char_ext_2.set(qn('w:val'), 'true')
+        char_ext_3 = OxmlElement('w:fldChar')
+        char_ext_3.set(qn('w:fldCharType'), 'end')
+        # ---
         r_element = run._r
-        r_element.append(fldChar)
-        r_element.append(instrText)
-        r_element.append(fldChar2)
-        r_element.append(fldChar3)
-        r_element.append(fldChar4)
-
+        r_element.append(char)
+        r_element.append(instr)
+        r_element.append(char_ext_1)
+        r_element.append(char_ext_2)
+        r_element.append(char_ext_3)
         return paragraph
 
     @staticmethod
@@ -294,6 +318,7 @@ class MyPrinter:
         paragraph.alignment = WD_PARAGRAPH_ALIGNMENT.CENTER
         # paragraph for storing numbers
         run = paragraph.add_run()
+        run.font.size = Pt(12)
         char = OxmlElement('w:fldChar')
         char.set(qn('w:fldCharType'), 'begin')
         # ---
@@ -308,6 +333,10 @@ class MyPrinter:
         run._r.append(instr)
         run._r.append(char_ext)
 
+        footer_text = footer.add_paragraph()
+        footer_text.add_run("SQDoc 1.0")
+        footer_text.alignment = WD_PARAGRAPH_ALIGNMENT.CENTER
+
 
 def execute(_details, _core):
     """
@@ -320,6 +349,7 @@ def execute(_details, _core):
     """
     try:
         MyPrinter(_details, _core)
+        print(f"{_core.utils.timestamp()} Document saved, all activities finished.")
     except Exception as exc:
         print(f"{_core.utils.timestamp()} Unspecified exception, check log for details. Exiting...")
         _core.log.warn(f"Unspecified *.docx file creation exception: {exc}")

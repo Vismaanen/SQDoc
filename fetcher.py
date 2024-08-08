@@ -1,6 +1,6 @@
 """
 Author		: paradowski.michal@outlook.com
-Description	: main executable of SQDoc - MSSQL database documentation script
+Description	: reads details of database and included tables
 Updates:
 
 * 2024-07-26 - v1.0 - creation
@@ -75,6 +75,8 @@ class MyFetcher:
                 details['columns'] = self._get_column_details(catalog, schema, name)
                 # get keys info
                 details['keys'] = self._get_key_details(catalog, schema, name)
+                # get extended properties info
+                details['extended'] = self._get_extended_properties(schema, name)
                 # append
                 results[table[2]] = details
                 print(f"{self._core.utils.timestamp()} ┗ {table[2]}")
@@ -93,25 +95,48 @@ class MyFetcher:
 
     def _get_column_details(self, catalog, schema, name):
         """
-
-        :param catalog:
-        :param schema:
-        :param name:
-        :return:
+        Attempt to obtain column details: data type, if nullable, character lengths.
+        :param str catalog: catalog name
+        :param str schema: schema name
+        :param str name: table name
+        :return: table properties list
+        :rtype: list(any)
         """
         query = (f"select column_name, data_type, isnull(cast(character_maximum_length as varchar), 'not set'),"
                  f" is_nullable from information_schema.columns "
                  f"where table_catalog = '{catalog}' and table_schema = '{schema}' and table_name = '{name}'")
-        properties = self._core.utils.get_data(self._db_conn, query)
-        return properties
+        return self._core.utils.get_data(self._db_conn, query)
 
     def _get_key_details(self, catalog, schema, name):
+        """
+        Attempt to obtain key details for a given table.
+        :param str catalog: catalog name
+        :param str schema: schema name
+        :param str name: table name
+        :return: table keys list
+        :rtype: list(any)
+        """
         query = (f"select K.table_name, K.column_name, K.constraint_name, T.constraint_type "
                  f"from information_schema.key_column_usage as K "
                  f"join information_schema.table_constraints as T on K.constraint_name = T.constraint_name "
                  f"where K.table_catalog = '{catalog}' and K.table_schema = '{schema}' and K.table_name = '{name}'")
-        keys = self._core.utils.get_data(self._db_conn, query)
-        return keys
+        return self._core.utils.get_data(self._db_conn, query)
+
+    def _get_extended_properties(self, schema, name):
+        """
+        Attempt to obtain extended properties of a given table.
+        :param str schema: schema name
+        :param str name: tabl name
+        :return: table extended properties list
+        :rtype: list(any)
+        """
+        query = (f"select cast(isnull(p.name, '---') as varchar(max)) as Property, "
+                 f"cast(isnull(p.value, '---') as varchar(max)) as Value "
+                 f"from sys.extended_properties p "
+                 f"inner join sys.tables t on p.major_id = t.object_id "
+                 f"inner join sys.schemas s on t.schema_id = s.schema_id "
+                 f"where t.name = '{name}' and s.name = '{schema}' and p.minor_id = 0")
+        return self._core.utils.get_data(self._db_conn, query)
 
     def _get_db_configration(self):
         """
@@ -121,7 +146,7 @@ class MyFetcher:
         """
         results = {}
         self._core.log.info("reading database configuration details")
-        print(f"{self._core.utils.timestamp()} Reading database configuration details")
+        print(f"{self._core.utils.timestamp()} reading database configuration details")
         for subject in ['Configuration', 'Scoped configuration']:
             results[subject] = self._get_db_options(subject)
         return results
@@ -160,9 +185,11 @@ class MyFetcher:
 def execute(_core):
     """
     Carry service reports creation tasks.
+    :raise exc: general unspecified exception.
     """
     try:
         return MyFetcher(_core)
     except Exception as exc:
         _core.log.warn(f"Unspecified data fetcher exception: {exc}")
+        print(f"{_core.utils.timestamp()} [ERROR] unspecified data fetch exception, exiting...")
         return
