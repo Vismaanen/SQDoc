@@ -32,6 +32,7 @@ class MyPrinter:
         self._export = _core.export
         self._db_config = _details.db_config
         self._db_tables = _details.db_tables
+        self._db_procedures = _details.db_procedures
         self._properties = self._set_properties()
         self._print_document()
 
@@ -267,6 +268,70 @@ class MyPrinter:
                 row[1].width = Inches(2)
                 row[2].width = Inches(1)
                 row[3].width = Inches(1)
+
+            # increment for table header
+            paragraph += 1
+
+        # next page
+        doc.add_page_break()
+
+        # ---------------------------------------------------------------------------------
+        # stored procedure details
+        # ---------------------------------------------------------------------------------
+        doc.add_heading(f'3. {self._db_name} stored procedures', level=1)
+        doc.add_paragraph(f'This section covers basic configuration details of configured stored procedures.')
+        # for each subject - create content table
+        paragraph = 1
+        for procedure in self._db_procedures:
+            content = self._db_procedures[procedure]
+            doc.add_heading(f"3.{paragraph} {procedure}", level=2)
+
+            # section - extended properties
+            doc.add_heading(f"3.{paragraph}.1 Extended properties", level=3)
+            if not content['extended']:
+                doc.add_paragraph(f'No extended properties configured for this procedure.')
+            else:
+                # create table
+                table = doc.add_table(rows=1, cols=2)
+                table.autofit = False
+                table.style = 'Light List Accent 1'
+                theader = table.rows[0].cells
+                # header text
+                theader[0].text = 'Property name'
+                theader[1].text = 'Property value'
+                # column dimensions
+                theader[0].width = Inches(2)
+                theader[1].width = Inches(4)
+                for item in content['extended']:
+                    row = table.add_row().cells
+                    row[0].text = item[0]
+                    row[1].text = item[1]
+                    row[0].width = Inches(2)
+                    row[1].width = Inches(4)
+
+            # section - stored procedure details
+            doc.add_heading(f"3.{paragraph}.2 Details", level=3)
+            if not content['info']:
+                doc.add_paragraph(f'No properties obtained for this procedure.')
+            else:
+                # create table
+                table = doc.add_table(rows=1, cols=2)
+                table.autofit = False
+                table.style = 'Light List Accent 1'
+                theader = table.rows[0].cells
+                # header text
+                theader[0].text = 'Property name'
+                theader[1].text = 'Property value'
+                # column dimensions
+                theader[0].width = Inches(2)
+                theader[1].width = Inches(4)
+                for item in content['info']:
+                    row = table.add_row().cells
+                    row[0].text = item[0]
+                    row[1].text = item[1]
+                    row[0].width = Inches(2)
+                    row[1].width = Inches(4)
+
             # increment for table header
             paragraph += 1
 
@@ -274,7 +339,6 @@ class MyPrinter:
         path = f"{self._export}\\{self._db_name}_documentation.docx"
         print(f"{self._utils.timestamp()} Saving file: {path}")
         doc.save(path)
-        print()
 
     @staticmethod
     def _add_toc(paragraph):
@@ -290,7 +354,7 @@ class MyPrinter:
         char.set(qn('w:fldCharType'), 'begin')
         instr = OxmlElement('w:instrText')
         instr.set(qn('xml:space'), 'preserve')
-        instr.text = 'TOC \\o "1-3" \\h \\z \\u'
+        instr.text = 'TOC \\o "1-2" \\h \\z \\u'
         # ---
         char_ext_1 = OxmlElement('w:fldChar')
         char_ext_1.set(qn('w:fldCharType'), 'separate')

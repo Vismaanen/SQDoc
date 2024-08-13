@@ -23,7 +23,8 @@ class MyFetcher:
         self._core = _core
         self._db_conn = self._set_connection()
         self.db_config = self._get_db_configration()
-        self.db_tables = self._get_structure()
+        self.db_tables = self._get_tables()
+        self.db_procedures = self._get_procedures()
 
     def _set_connection(self):
         """
@@ -42,7 +43,7 @@ class MyFetcher:
             self._core.log.info("connection with database established")
             return _db_conn
 
-    def _get_structure(self):
+    def _get_tables(self):
         """
         Attempt to read database structure.
         :return: database details list or exit script on failure
@@ -76,7 +77,7 @@ class MyFetcher:
                 # get keys info
                 details['keys'] = self._get_key_details(catalog, schema, name)
                 # get extended properties info
-                details['extended'] = self._get_extended_properties(schema, name)
+                details['extended'] = self._get_table_ep(schema, name)
                 # append
                 results[table[2]] = details
                 print(f"{self._core.utils.timestamp()} ┗ {table[2]}")
@@ -122,7 +123,7 @@ class MyFetcher:
                  f"where K.table_catalog = '{catalog}' and K.table_schema = '{schema}' and K.table_name = '{name}'")
         return self._core.utils.get_data(self._db_conn, query)
 
-    def _get_extended_properties(self, schema, name):
+    def _get_table_ep(self, schema, name):
         """
         Attempt to obtain extended properties of a given table.
         :param str schema: schema name
@@ -180,6 +181,61 @@ class MyFetcher:
                 print(f"{self._core.utils.timestamp()} ┗ {subject} [ERROR]")
                 self._core.log.warn(f"Cannot read database options: {exc}")
                 return ["Not available"]
+
+    def _get_procedures(self):
+        """
+        Attempt to obtain basic details about stored procedures.
+        :param str catalog: catalog name
+        :param str schema: schema name
+        :return: list of details per stored procedure
+        """
+        results = {}
+        print(f"----------\n{self._core.utils.timestamp()} reading database structure")
+        try:
+            # get raw properties of stored procedures
+            query = (f"select p.name, s.name, cast(p.create_date as varchar(32)), cast(p.modify_date as varchar(32)), "
+                     f"cast(m.uses_ansi_nulls as varchar(max)), cast(m.uses_quoted_identifier as varchar(max)), "
+                     f"cast(p.is_auto_executed as varchar(max)) "
+                     f"from sys.procedures p "
+                     f"inner join sys.schemas s on p.schema_id = s.schema_id "
+                     f"inner join sys.sql_modules m on p.object_id = m.object_id "
+                     f"where p.name not like 'sp%'")
+            procedures = self._core.utils.get_data(self._db_conn, query)
+
+            # obtain extended properties, return as dict
+            if len(procedures)  == 0:
+                return False
+            else:
+                for procedure in procedures:
+                    details = {}
+                    details['info'] = [['Created on', procedure[2]],
+                                       ['Updated on', procedure[3]],
+                                       ['Use ANSI nulls', procedure[4]],
+                                       ['Use quoted identifier', procedure[5]],
+                                       ['Is auto executed', procedure[6]]]
+                    details['extended'] = self._get_procedure_ep(procedure[0], procedure[1])
+                    results[procedure[0]] = details.copy()
+            return results
+        except Exception as exc:
+            self._core.log.warn(f"cannot retrieve stored procedure details: {exc}")
+            return False
+
+    def _get_procedure_ep(self, name, schema):
+        """
+        Attempt to read extended properties of a procedure
+        :return:
+        """
+        query = (f"select cast(ep.name as varchar(max)), cast(ep.value as varchar(max)) "
+                 f"from sys.extended_properties ep "
+                 f"join sys.objects o on ep.major_id = o.object_id "
+                 f"join sys.schemas s on o.schema_id = s.schema_id "
+                 f"where o.type = 'P' and s.name = '{schema}' and o.name = '{name}' "
+                 f"order by ep.name;")
+        properties = self._core.utils.get_data(self._db_conn, query)
+        if len(properties) > 0:
+            return properties
+        else:
+            return False
 
 
 def execute(_core):
