@@ -8,12 +8,8 @@ Updates:
 
 # import generic libraries
 import os
-import pyodbc
 import logging
 from datetime import datetime
-
-# global variables
-_conn_string = "Driver={SQL Server};Server=G02PLXN08339\\SQLEXPRESS;Database=Neo_DB;Trusted_Connection=yes;"
 
 
 class MyUtils:
@@ -25,18 +21,6 @@ class MyUtils:
         """
         Initialize class instance!
         """
-
-    @staticmethod
-    def connect_db():
-        """
-        Attempt to create a db connection object.
-        :return: db connection object
-        :rtype: pyodbc.connect()
-        """
-        try:
-            return pyodbc.connect(_conn_string)
-        except Exception as exc:
-            return False
 
     @staticmethod
     def timestamp():
@@ -77,5 +61,5 @@ class MyUtils:
             for record in cursor.fetchall():
                 result_list.append(list(record))
             return result_list
-        except Exception as e:
+        except Exception as exc:
             return None

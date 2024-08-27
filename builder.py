@@ -11,10 +11,11 @@ Updates:
 # import generic libraries
 import os
 import sys
+import time
 from docx import Document
-from docx.shared import Inches, Pt
 from docx.oxml.ns import qn
 from docx.oxml import OxmlElement
+from docx.shared import Inches, Pt
 from docx.enum.text import WD_PARAGRAPH_ALIGNMENT
 
 
@@ -69,7 +70,7 @@ class MyPrinter:
         # ---------------------------------------------------------------------------------
         doc.add_heading(f'{self._db_name} database technical documentation', 0)
         # document details table
-        config = {'header': ['Document properties', ''], 'columns': [2, 2]}
+        config = {'header': ['Properties', ''], 'columns': [1, 3]}
         self._add_table(doc, config, self._properties)
         # next page
         doc.add_page_break()
@@ -254,7 +255,7 @@ class MyPrinter:
         run._r.append(char_ext)
 
         footer_text = footer.add_paragraph()
-        footer_text.add_run("SQDoc 1.0")
+        footer_text.add_run("SQDoc v1.0")
         footer_text.alignment = WD_PARAGRAPH_ALIGNMENT.CENTER
 
     @staticmethod
@@ -303,4 +304,5 @@ def execute(_details, _core):
     except Exception as exc:
         print(f"{_core.utils.timestamp()} Unspecified exception, check log for details. Exiting...")
         _core.log.warn(f"Unspecified *.docx file creation exception: {exc}")
+        time.sleep(5)
         sys.exit(0)

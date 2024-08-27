@@ -4,11 +4,14 @@ Description	: reads details of database and included tables
 Updates:
 
 * 2024-07-26 - v1.0 - creation
+* 2024-08-27 - v1.0 - code cleanup
 """
 
 # import generic libraries
 import sys
 import time
+import main
+import pyodbc
 
 
 class MyFetcher:
@@ -40,15 +43,15 @@ class MyFetcher:
         :rtype: pyodbc.connect(), optional
         """
         print(f"{self._core.utils.timestamp()} connecting with database")
-        _db_conn = self._core.utils.connect_db()
-        if not _db_conn:
-            print(f"{self._core.utils.timestamp()} ┗ [ERROR] cannot establish connection")
-            self._core.log.warn("cannot establish pyodbc connection with database! exiting")
-            sys.exit(0)
-        else:
+        try:
+            _db_conn = pyodbc.connect(main.db_conn_string)
             print(f"{self._core.utils.timestamp()} ┗ [OK] connection set")
             self._core.log.info("connection with database established")
             return _db_conn
+        except Exception as exc:
+            print(f"{self._core.utils.timestamp()} ┗ [ERROR] cannot establish connection")
+            self._core.log.warn(f"cannot establish pyodbc connection with database: {str(exc)}")
+            sys.exit(0)
 
     def _get_db_configration(self):
         """
@@ -117,8 +120,6 @@ class MyFetcher:
     def _get_procedures(self):
         """
         Attempt to obtain basic details about stored procedures.
-        :param str catalog: catalog name
-        :param str schema: schema name
         :return: list of details per stored procedure
         """
         results = {}
@@ -135,17 +136,16 @@ class MyFetcher:
             procedures = self._core.utils.get_data(self._db_conn, query)
 
             # obtain extended properties, return as dict
-            if len(procedures)  == 0:
+            if len(procedures) == 0:
                 return False
             else:
                 for procedure in procedures:
-                    details = {}
-                    details['info'] = [['Created on', procedure[2]],
-                                       ['Updated on', procedure[3]],
-                                       ['Use ANSI nulls', procedure[4]],
-                                       ['Use quoted identifier', procedure[5]],
-                                       ['Is auto executed', procedure[6]]]
-                    details['extended'] = self._get_procedure_ep(procedure[0], procedure[1])
+                    details = {'info': [['Created on', procedure[2]],
+                                        ['Updated on', procedure[3]],
+                                        ['Use ANSI nulls', procedure[4]],
+                                        ['Use quoted identifier', procedure[5]],
+                                        ['Is auto executed', procedure[6]]],
+                               'extended': self._get_procedure_ep(procedure[0], procedure[1])}
                     results[procedure[0]] = details.copy()
             return results
         except Exception as exc:

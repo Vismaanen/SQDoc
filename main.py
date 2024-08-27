@@ -4,7 +4,7 @@ Description	: main executable of SQDoc - MSSQL database documentation script
 Updates:
 
 * 2024-07-26 - v1.0 - creation
-* 2024-08-27 - v1.0 - document printer methods code redesign and simplification
+* 2024-08-27 - v1.0 - code cleanup, adding document property settings
 """
 
 # import generic libraries
@@ -23,10 +23,11 @@ _main_path = "C:\\SQDoc"
 _logs_path = "C:\\SQDoc\\logs"
 _docs_path = "C:\\SQDoc\\docx"
 _db_name = "Neo_DB"
+db_conn_string = "Driver={SQL Server};Server=G02PLXN08339\\SQLEXPRESS;Database=Neo_DB;Trusted_Connection=yes;"
 
 # printed document properties
-_doc_properties = [['Owner', 'ECS'], ['Author', 'Michal Paradowski'], ['E-mail', 'michal.paradowski@fujitsu.com'],
-                   ['Version', '1.0'], ['Status', 'Final'], ['Created on', date.today().strftime("%Y-%m-%d")]]
+_doc_properties = [['Owner:', 'ECS'], ['Author:', 'Michal Paradowski'], ['E-mail:', 'michal.paradowski@fujitsu.com'],
+                   ['Version:', '1.0'], ['Status:', 'Final'], ['Created on:', date.today().strftime("%Y-%m-%d")]]
 
 # printed document content setting
 # set sections available for printing to be included
