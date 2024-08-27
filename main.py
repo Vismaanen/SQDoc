@@ -4,13 +4,14 @@ Description	: main executable of SQDoc - MSSQL database documentation script
 Updates:
 
 * 2024-07-26 - v1.0 - creation
+* 2024-08-27 - v1.0 - document printer methods code redesign and simplification
 """
 
 # import generic libraries
 import os
 import sys
 import time
-from datetime import datetime
+from datetime import date, datetime
 
 # import engine modules
 import fetcher as f
@@ -23,11 +24,20 @@ _logs_path = "C:\\SQDoc\\logs"
 _docs_path = "C:\\SQDoc\\docx"
 _db_name = "Neo_DB"
 
+# printed document properties
+_doc_properties = [['Owner', 'ECS'], ['Author', 'Michal Paradowski'], ['E-mail', 'michal.paradowski@fujitsu.com'],
+                   ['Version', '1.0'], ['Status', 'Final'], ['Created on', date.today().strftime("%Y-%m-%d")]]
+
+# printed document content setting
+# set sections available for printing to be included
+_doc_content = {'db_configuration': True, 'db_tables': True, 'db_procedures': True}
+
 
 class SQDoc:
     """
     Main executable.
     """
+
     def __init__(self):
         """
         Initialize class instance.
@@ -56,9 +66,13 @@ __________________________________________
             # directory checks
             os.makedirs(_logs_path, exist_ok=True)
             os.makedirs(_docs_path, exist_ok=True)
-            # proceed
+            # set document properties
+            self.doc_content = _doc_content
+            self.doc_properties = _doc_properties
+            # set utilities
             self.db_name = _db_name
             self.export = _docs_path
+            # proceed with db data fetch and export
             self.log.info(f"----------")
             self.log.info(f"new script execution")
             b.execute(f.execute(self), self)
@@ -68,9 +82,5 @@ __________________________________________
             sys.exit(1)
 
 
-def main():
-    SQDoc()
-
-
 if __name__ == '__main__':
-    main()
+    SQDoc()

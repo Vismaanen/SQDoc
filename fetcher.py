@@ -22,9 +22,16 @@ class MyFetcher:
         """
         self._core = _core
         self._db_conn = self._set_connection()
-        self.db_config = self._get_db_configration()
-        self.db_tables = self._get_tables()
-        self.db_procedures = self._get_procedures()
+        self.db_config = False
+        self.db_tables = False
+        self.db_procedures = False
+        # obtain data depending on a document content settings
+        if _core.doc_content['db_configuration']:
+            self.db_config = self._get_db_configration()
+        if _core.doc_content['db_tables']:
+            self.db_tables = self._get_tables()
+        if _core.doc_content['db_procedures']:
+            self.db_procedures = self._get_procedures()
 
     def _set_connection(self):
         """
@@ -42,6 +49,19 @@ class MyFetcher:
             print(f"{self._core.utils.timestamp()} ┗ [OK] connection set")
             self._core.log.info("connection with database established")
             return _db_conn
+
+    def _get_db_configration(self):
+        """
+        Attempt to read database properties.
+        :return: dictionary of configuration details
+        :rtype: dict(str, any)
+        """
+        results = {}
+        self._core.log.info("reading database configuration details")
+        print(f"{self._core.utils.timestamp()} reading database configuration details")
+        for subject in ['Configuration', 'Scoped configuration']:
+            results[subject] = self._get_db_options(subject)
+        return results
 
     def _get_tables(self):
         """
@@ -64,7 +84,7 @@ class MyFetcher:
             sys.exit(0)
 
         # proceed if succeeded
-        print(f"{self._core.utils.timestamp()} reading table details")
+        print(f"----------\n{self._core.utils.timestamp()} reading table details")
         self._core.log.info("reading db tables")
         results = {}
         # loop tables
@@ -93,6 +113,46 @@ class MyFetcher:
         else:
             self._core.log.warn(f"no data for documentation, exiting")
             sys.exit(0)
+
+    def _get_procedures(self):
+        """
+        Attempt to obtain basic details about stored procedures.
+        :param str catalog: catalog name
+        :param str schema: schema name
+        :return: list of details per stored procedure
+        """
+        results = {}
+        print(f"----------\n{self._core.utils.timestamp()} reading stored procedures")
+        try:
+            # get raw properties of stored procedures
+            query = (f"select p.name, s.name, cast(p.create_date as varchar(32)), cast(p.modify_date as varchar(32)), "
+                     f"cast(m.uses_ansi_nulls as varchar(max)), cast(m.uses_quoted_identifier as varchar(max)), "
+                     f"cast(p.is_auto_executed as varchar(max)) "
+                     f"from sys.procedures p "
+                     f"inner join sys.schemas s on p.schema_id = s.schema_id "
+                     f"inner join sys.sql_modules m on p.object_id = m.object_id "
+                     f"where p.name not like 'sp%'")
+            procedures = self._core.utils.get_data(self._db_conn, query)
+
+            # obtain extended properties, return as dict
+            if len(procedures)  == 0:
+                return False
+            else:
+                for procedure in procedures:
+                    details = {}
+                    details['info'] = [['Created on', procedure[2]],
+                                       ['Updated on', procedure[3]],
+                                       ['Use ANSI nulls', procedure[4]],
+                                       ['Use quoted identifier', procedure[5]],
+                                       ['Is auto executed', procedure[6]]]
+                    details['extended'] = self._get_procedure_ep(procedure[0], procedure[1])
+                    results[procedure[0]] = details.copy()
+            return results
+        except Exception as exc:
+            self._core.log.warn(f"cannot retrieve stored procedure details: {exc}")
+            return False
+
+    # utility methods for obtaining details
 
     def _get_column_details(self, catalog, schema, name):
         """
@@ -139,19 +199,6 @@ class MyFetcher:
                  f"where t.name = '{name}' and s.name = '{schema}' and p.minor_id = 0")
         return self._core.utils.get_data(self._db_conn, query)
 
-    def _get_db_configration(self):
-        """
-        Attempt to read database properties.
-        :return: dictionary of configuration details
-        :rtype: dict(str, any)
-        """
-        results = {}
-        self._core.log.info("reading database configuration details")
-        print(f"{self._core.utils.timestamp()} reading database configuration details")
-        for subject in ['Configuration', 'Scoped configuration']:
-            results[subject] = self._get_db_options(subject)
-        return results
-
     def _get_db_options(self, subject):
         """
         Attempt to read database options section.`
@@ -182,48 +229,10 @@ class MyFetcher:
                 self._core.log.warn(f"Cannot read database options: {exc}")
                 return ["Not available"]
 
-    def _get_procedures(self):
-        """
-        Attempt to obtain basic details about stored procedures.
-        :param str catalog: catalog name
-        :param str schema: schema name
-        :return: list of details per stored procedure
-        """
-        results = {}
-        print(f"----------\n{self._core.utils.timestamp()} reading database structure")
-        try:
-            # get raw properties of stored procedures
-            query = (f"select p.name, s.name, cast(p.create_date as varchar(32)), cast(p.modify_date as varchar(32)), "
-                     f"cast(m.uses_ansi_nulls as varchar(max)), cast(m.uses_quoted_identifier as varchar(max)), "
-                     f"cast(p.is_auto_executed as varchar(max)) "
-                     f"from sys.procedures p "
-                     f"inner join sys.schemas s on p.schema_id = s.schema_id "
-                     f"inner join sys.sql_modules m on p.object_id = m.object_id "
-                     f"where p.name not like 'sp%'")
-            procedures = self._core.utils.get_data(self._db_conn, query)
-
-            # obtain extended properties, return as dict
-            if len(procedures)  == 0:
-                return False
-            else:
-                for procedure in procedures:
-                    details = {}
-                    details['info'] = [['Created on', procedure[2]],
-                                       ['Updated on', procedure[3]],
-                                       ['Use ANSI nulls', procedure[4]],
-                                       ['Use quoted identifier', procedure[5]],
-                                       ['Is auto executed', procedure[6]]]
-                    details['extended'] = self._get_procedure_ep(procedure[0], procedure[1])
-                    results[procedure[0]] = details.copy()
-            return results
-        except Exception as exc:
-            self._core.log.warn(f"cannot retrieve stored procedure details: {exc}")
-            return False
-
     def _get_procedure_ep(self, name, schema):
         """
         Attempt to read extended properties of a procedure
-        :return:
+        :return: 
         """
         query = (f"select cast(ep.name as varchar(max)), cast(ep.value as varchar(max)) "
                  f"from sys.extended_properties ep "

@@ -4,12 +4,13 @@ Description	: main executable of SQDoc - MSSQL database documentation script
 Updates:
 
 * 2024-08-02 - v1.0 - creation
+* 2024-08-27 - v1.0 - code cleanup, adding content settings enabling predefined content inclusion / exclusion
+                      from printed document
 """
 
 # import generic libraries
 import os
 import sys
-from datetime import date
 from docx import Document
 from docx.shared import Inches, Pt
 from docx.oxml.ns import qn
@@ -26,29 +27,20 @@ class MyPrinter:
         """
         Initialize cass instance.
         """
+        # content settings
+        self._content = _core.doc_content
+        self._properties = _core.doc_properties
+        # content objects
+        self._db_config = _details.db_config
+        self._db_tables = _details.db_tables
+        self._db_procedures = _details.db_procedures
+        # utilities
         self._db_name = _core.db_name
         self._log = _core.log
         self._utils = _core.utils
         self._export = _core.export
-        self._db_config = _details.db_config
-        self._db_tables = _details.db_tables
-        self._db_procedures = _details.db_procedures
-        self._properties = self._set_properties()
+        # document export
         self._print_document()
-
-    @staticmethod
-    def _set_properties():
-        """
-        Define properties of a document.
-        :return: list of properties
-        :rtype: list(any)
-        """
-        return [['Owner', 'ECS'],
-                ['Author', 'Michał Paradowski'],
-                ['E-mail', 'michal.paradowski@fujitsu.com'],
-                ['Version', '1.0'],
-                ['Status', 'Final'],
-                ['Created on', date.today().strftime("%Y-%m-%d")]]
 
     def _print_document(self):
         """
@@ -77,22 +69,8 @@ class MyPrinter:
         # ---------------------------------------------------------------------------------
         doc.add_heading(f'{self._db_name} database technical documentation', 0)
         # document details table
-        table = doc.add_table(rows=1, cols=2)
-        table.style = 'Light List Accent 1'
-        theader = table.rows[0].cells
-        # header text
-        theader[0].text = 'Document properties'
-        theader[1].text = ''
-        # column dimensions
-        theader[0].width = Inches(2)
-        theader[1].width = Inches(2)
-        for item in self._properties:
-            row = table.add_row().cells
-            row[0].text = item[0]
-            row[1].text = item[1]
-            # column dimensions
-            row[0].width = Inches(2)
-            row[1].width = Inches(2)
+        config = {'header': ['Document properties', ''], 'columns': [2, 2]}
+        self._add_table(doc, config, self._properties)
         # next page
         doc.add_page_break()
 
@@ -124,216 +102,94 @@ class MyPrinter:
         # ---------------------------------------------------------------------------------
         # database details
         # ---------------------------------------------------------------------------------
-        doc.add_heading(f'2. {self._db_name} database details', level=1)
-        doc.add_paragraph(f'This section covers basic configuration details of database.')
-        # for each subject - create content table
-        paragraph = 1
-        for scope in self._db_config:
-            content = self._db_config[scope]
-            doc.add_heading(f"2.{paragraph} {scope}", level=2)
-            # create table
-            # separate formatting for different scope subjects
-            if scope == 'Configuration':
-                table = doc.add_table(rows=1, cols=3)
-                table.autofit = False
-                table.style = 'Light List Accent 1'
-                theader = table.rows[0].cells
-                # header text
-                theader[0].text = 'Configuration item'
-                theader[1].text = 'Value default'
-                theader[2].text = 'Value in use'
-                # column dimensions
-                theader[0].width = Inches(2)
-                theader[1].width = Inches(2)
-                theader[2].width = Inches(2)
-                for item, default, value in content:
-                    row = table.add_row().cells
-                    row[0].text = item
-                    row[1].text = default
-                    row[2].text = value
-                    # column dimensions
-                    row[0].width = Inches(2)
-                    row[1].width = Inches(2)
-                    row[2].width = Inches(2)
-
-            if scope == "Scoped configuration":
-                table = doc.add_table(rows=1, cols=2)
-                table.autofit = False
-                table.style = 'Light List Accent 1'
-                theader = table.rows[0].cells
-                # header text
-                theader[0].text = 'Configuration item'
-                theader[1].text = 'Value'
-                # column dimensions
-                theader[0].width = Inches(3)
-                theader[1].width = Inches(3)
-                for item, value in content:
-                    row = table.add_row().cells
-                    row[0].text = item
-                    row[1].text = value
-                    # column dimensions
-                    row[0].width = Inches(3)
-                    row[1].width = Inches(3)
-
-            # increment for table header
-            paragraph += 1
-        # next page
-        doc.add_page_break()
+        if self._content['db_configuration']:
+            doc.add_heading(f'2. {self._db_name} database details', level=1)
+            doc.add_paragraph(f'This section covers basic configuration details of database.')
+            # for each subject - create content table
+            paragraph = 1
+            for scope in self._db_config:
+                content = self._db_config[scope]
+                doc.add_heading(f"2.{paragraph} {scope}", level=2)
+                # create table
+                # separate formatting for different scope subjects
+                if scope == 'Configuration':
+                    config = {'header': ['Configuration item', 'Value default', 'Value in use'], 'columns': [4, 1, 1]}
+                    self._add_table(doc, config, content)
+                if scope == "Scoped configuration":
+                    config = {'header': ['Configuration item', 'Value'], 'columns': [4, 2]}
+                    self._add_table(doc, config, content)
+                paragraph += 1
+            # next page
+            doc.add_page_break()
 
         # ---------------------------------------------------------------------------------
         # per-table details
         # ---------------------------------------------------------------------------------
-        doc.add_heading(f'3. {self._db_name} tables', level=1)
-        doc.add_paragraph(f'This section covers basic configuration details of database tables.')
-        # for each subject - create content table
-        paragraph = 1
-        for table in self._db_tables:
-            content = self._db_tables[table]
-            doc.add_heading(f"3.{paragraph} {table}", level=2)
+        if self._content['db_tables']:
+            doc.add_heading(f'3. {self._db_name} tables', level=1)
+            doc.add_paragraph(f'This section covers basic configuration details of database tables.')
+            # for each subject - create content table
+            paragraph = 1
+            for table in self._db_tables:
+                content = self._db_tables[table]
+                doc.add_heading(f"3.{paragraph} {table}", level=2)
 
-            # section - keys
-            doc.add_heading(f"3.{paragraph}.1 Keys", level=3)
-            if len(content['keys']) == 0:
-                doc.add_paragraph(f'No keys configured for this table.')
-            else:
-                # create table
-                table = doc.add_table(rows=1, cols=3)
-                table.autofit = False
-                table.style = 'Light List Accent 1'
-                theader = table.rows[0].cells
-                # header text
-                theader[0].text = 'Key column name'
-                theader[1].text = 'Constraint name'
-                theader[2].text = 'Constraint type'
-                # column dimensions
-                theader[0].width = Inches(2)
-                theader[1].width = Inches(2)
-                theader[2].width = Inches(2)
-                for key in content['keys']:
-                    row = table.add_row().cells
-                    row[0].text = key[1]
-                    row[1].text = key[2]
-                    row[2].text = key[3]
-                    row[0].width = Inches(2)
-                    row[1].width = Inches(2)
-                    row[2].width = Inches(2)
+                # section - keys
+                doc.add_heading(f"3.{paragraph}.1 Keys", level=3)
+                if len(content['keys']) == 0:
+                    doc.add_paragraph(f'No keys configured for this table.')
+                else:
+                    config = {'header': ['Key column name', 'Constraint name', 'Constraint type'], 'columns': [2, 2, 2]}
+                    self._add_table(doc, config, content['keys'])
 
-            # section - extended properties
-            doc.add_heading(f"3.{paragraph}.2 Extended properties", level=3)
-            if len(content['extended']) == 0:
-                doc.add_paragraph(f'No extended properties configured for this table.')
-            else:
-                # create table
-                table = doc.add_table(rows=1, cols=2)
-                table.autofit = False
-                table.style = 'Light List Accent 1'
-                theader = table.rows[0].cells
-                # header text
-                theader[0].text = 'Property name'
-                theader[1].text = 'Property value'
-                # column dimensions
-                theader[0].width = Inches(2)
-                theader[1].width = Inches(4)
-                for key in content['extended']:
-                    row = table.add_row().cells
-                    row[0].text = key[0]
-                    row[1].text = key[1]
-                    row[0].width = Inches(2)
-                    row[1].width = Inches(4)
+                # section - extended properties
+                doc.add_heading(f"3.{paragraph}.2 Extended properties", level=3)
+                if len(content['extended']) == 0:
+                    doc.add_paragraph(f'No extended properties configured for this table.')
+                else:
+                    config = {'header': ['Property name', 'Property value'], 'columns': [2, 4]}
+                    self._add_table(doc, config, content['extended'])
 
-            # section - columns
-            doc.add_heading(f"3.{paragraph}.3 Columns", level=3)
-            # create table
-            table = doc.add_table(rows=1, cols=4)
-            table.autofit = False
-            table.style = 'Light List Accent 1'
-            theader = table.rows[0].cells
-            # header text
-            theader[0].text = 'Column name'
-            theader[1].text = 'Data type'
-            theader[2].text = 'Max length'
-            theader[3].text = 'Null-able'
-            # column dimensions
-            theader[0].width = Inches(2)
-            theader[1].width = Inches(2)
-            theader[2].width = Inches(1)
-            theader[3].width = Inches(1)
-            for column in content['columns']:
-                row = table.add_row().cells
-                row[0].text = column[0]
-                row[1].text = column[1]
-                row[2].text = column[2]
-                row[3].text = column[3]
-                row[0].width = Inches(2)
-                row[1].width = Inches(2)
-                row[2].width = Inches(1)
-                row[3].width = Inches(1)
+                # section - columns
+                doc.add_heading(f"3.{paragraph}.3 Columns", level=3)
+                if len(content['columns']) == 0:
+                    doc.add_paragraph(f'No columns configured for this table')
+                else:
+                    config = {'header': ['Column name', 'Data type', 'Max length', 'Nullable'], 'columns': [2, 2, 1, 1]}
+                    self._add_table(doc, config, content['columns'])
+                paragraph += 1
 
-            # increment for table header
-            paragraph += 1
-
-        # next page
-        doc.add_page_break()
+            # next page
+            doc.add_page_break()
 
         # ---------------------------------------------------------------------------------
         # stored procedure details
         # ---------------------------------------------------------------------------------
-        doc.add_heading(f'3. {self._db_name} stored procedures', level=1)
-        doc.add_paragraph(f'This section covers basic configuration details of configured stored procedures.')
-        # for each subject - create content table
-        paragraph = 1
-        for procedure in self._db_procedures:
-            content = self._db_procedures[procedure]
-            doc.add_heading(f"3.{paragraph} {procedure}", level=2)
+        if self._content['db_procedures']:
+            doc.add_heading(f'3. {self._db_name} stored procedures', level=1)
+            doc.add_paragraph(f'This section covers basic configuration details of configured stored procedures.')
+            # for each subject - create content table
+            paragraph = 1
+            for procedure in self._db_procedures:
+                content = self._db_procedures[procedure]
+                doc.add_heading(f"3.{paragraph} {procedure}", level=2)
 
-            # section - extended properties
-            doc.add_heading(f"3.{paragraph}.1 Extended properties", level=3)
-            if not content['extended']:
-                doc.add_paragraph(f'No extended properties configured for this procedure.')
-            else:
-                # create table
-                table = doc.add_table(rows=1, cols=2)
-                table.autofit = False
-                table.style = 'Light List Accent 1'
-                theader = table.rows[0].cells
-                # header text
-                theader[0].text = 'Property name'
-                theader[1].text = 'Property value'
-                # column dimensions
-                theader[0].width = Inches(2)
-                theader[1].width = Inches(4)
-                for item in content['extended']:
-                    row = table.add_row().cells
-                    row[0].text = item[0]
-                    row[1].text = item[1]
-                    row[0].width = Inches(2)
-                    row[1].width = Inches(4)
+                # section - extended properties
+                doc.add_heading(f"3.{paragraph}.1 Extended properties", level=3)
+                if not content['extended']:
+                    doc.add_paragraph(f'No extended properties configured for this procedure.')
+                else:
+                    config = {'header': ['Property name', 'Property value'], 'columns': [2, 4]}
+                    self._add_table(doc, config, content['extended'])
 
-            # section - stored procedure details
-            doc.add_heading(f"3.{paragraph}.2 Details", level=3)
-            if not content['info']:
-                doc.add_paragraph(f'No properties obtained for this procedure.')
-            else:
-                # create table
-                table = doc.add_table(rows=1, cols=2)
-                table.autofit = False
-                table.style = 'Light List Accent 1'
-                theader = table.rows[0].cells
-                # header text
-                theader[0].text = 'Property name'
-                theader[1].text = 'Property value'
-                # column dimensions
-                theader[0].width = Inches(2)
-                theader[1].width = Inches(4)
-                for item in content['info']:
-                    row = table.add_row().cells
-                    row[0].text = item[0]
-                    row[1].text = item[1]
-                    row[0].width = Inches(2)
-                    row[1].width = Inches(4)
-
-            # increment for table header
-            paragraph += 1
+                # section - stored procedure details
+                doc.add_heading(f"3.{paragraph}.2 Details", level=3)
+                if not content['info']:
+                    doc.add_paragraph(f'No properties obtained for this procedure.')
+                else:
+                    config = {'header': ['Property name', 'Property value'], 'columns': [2, 4]}
+                    self._add_table(doc, config, content['info'])
+                paragraph += 1
 
         # Save the document
         path = f"{self._export}\\{self._db_name}_documentation.docx"
@@ -400,6 +256,36 @@ class MyPrinter:
         footer_text = footer.add_paragraph()
         footer_text.add_run("SQDoc 1.0")
         footer_text.alignment = WD_PARAGRAPH_ALIGNMENT.CENTER
+
+    @staticmethod
+    def _add_table(doc, config, content):
+        """
+        Create table for provided data.
+        :param doc: python-docx document object
+        :param config: table configuration containing header column names and column dimensions list
+        :param content: table content list
+        :type doc: docx.Document()
+        :type config: dict(str, any)
+        :type content: list(any)
+        :return: modified document object
+        :rtype: docx.Document()
+        """
+        cols = len(config['columns'])
+        table = doc.add_table(rows=1, cols=cols)
+        table.autofit = False
+        table.style = 'Light List Accent 1'
+        theader = table.rows[0].cells
+        # set header text and column dimensions
+        for item_id in range(0, cols):
+            theader[item_id].text = config['header'][item_id]
+            theader[item_id].width = Inches(config['columns'][item_id])
+        # write table content
+        for item in content:
+            row = table.add_row().cells
+            for item_id in range(0, cols):
+                row[item_id].text = item[item_id]
+                row[item_id].width = Inches(config['columns'][item_id])
+        return doc
 
 
 def execute(_details, _core):
