@@ -30,7 +30,7 @@ class MyFetcher:
         self.db_procedures = False
         # obtain data depending on a document content settings
         if _core.doc_content['db_configuration']:
-            self.db_config = self._get_db_configration()
+            self.db_config = self._get_db_configuration()
         if _core.doc_content['db_tables']:
             self.db_tables = self._get_tables()
         if _core.doc_content['db_procedures']:
@@ -53,7 +53,7 @@ class MyFetcher:
             self._core.log.warn(f"cannot establish pyodbc connection with database: {str(exc)}")
             sys.exit(0)
 
-    def _get_db_configration(self):
+    def _get_db_configuration(self):
         """
         Attempt to read database properties.
         :return: dictionary of configuration details

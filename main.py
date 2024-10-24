@@ -19,11 +19,11 @@ import builder as b
 import utility as u
 
 # global variables
-_main_path = "C:\\SQDoc"
-_logs_path = "C:\\SQDoc\\logs"
-_docs_path = "C:\\SQDoc\\docx"
+_main_path = "C:\\ECS\\SQDoc"
+_logs_path = "C:\\ECS\\Resources\\Logs"
+_docs_path = "C:\\ECS\\SQDoc\\docx"
 _db_name = "Neo_DB"
-db_conn_string = "Driver={SQL Server};Server=G02PLXN08339\\SQLEXPRESS;Database=Neo_DB;Trusted_Connection=yes;"
+db_conn_string = "Driver={SQL Server};Server=WIN-T147P4Q94OH\\SQLEXPRESS;Database=Neo_DB;Trusted_Connection=yes;"
 
 # printed document properties
 _doc_properties = [['Owner:', 'ECS'], ['Author:', 'Michal Paradowski'], ['E-mail:', 'michal.paradowski@fujitsu.com'],
@@ -60,7 +60,7 @@ __________________________________________
         self.utils = u.MyUtils()
 
         # setup log
-        _log_path = f"{_logs_path}\\{datetime.now().strftime("%Y-%m-%d_%H-%M-%S")}.log"
+        _log_path = f"{_logs_path}\\{datetime.now().strftime("%Y-%m-%d_%H-%M-%S")}_SQDoc.log"
         self.log = self.utils.get_logger(_log_path)
         print(f"{self.utils.timestamp()} log file: {_log_path}\n----------")
         try:
