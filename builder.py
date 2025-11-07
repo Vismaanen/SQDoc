@@ -1,18 +1,14 @@
 """
-Author		: paradowski.michal@outlook.com
-Description	: main executable of SQDoc - MSSQL database documentation script
-Updates:
-
-* 2024-08-02 - v1.0 - creation
-* 2024-08-27 - v1.0 - code cleanup, adding content settings enabling predefined content inclusion / exclusion
-                      from printed document
+Description	: report printer class for SQDoc script.
 """
 
-# import generic libraries
+
 import os
-import sys
-import time
+import main
+import logging
+from typing import Any
 from docx import Document
+import docx.text.paragraph
 from docx.oxml.ns import qn
 from docx.oxml import OxmlElement
 from docx.shared import Inches, Pt
@@ -24,22 +20,22 @@ class MyPrinter:
     Class responsible for exporting data into *.docx file.
     """
 
-    def __init__(self, _details, _core):
+    def __init__(self, settings: dict[str, Any], data: Any, log: logging.Logger):
         """
         Initialize cass instance.
         """
         # content settings
-        self._content = _core.doc_content
-        self._properties = _core.doc_properties
+        self.log = log
+        self._content = main.DOC_CONTENT
+        self._properties = main.DOC_PROPERTIES
         # content objects
-        self._db_config = _details.db_config
-        self._db_tables = _details.db_tables
-        self._db_procedures = _details.db_procedures
+        self._db_config = data.db_config
+        self._db_tables = data.db_tables
+        self._db_procedures = data.db_procedures
         # utilities
-        self._db_name = _core.db_name
-        self._log = _core.log
-        self._utils = _core.utils
-        self._export = _core.export
+        self._db_name = main.DB_NAME
+        self._utils = settings['utils']
+        self._export = main.PATH_DOCS
         # document export
         self._print_document()
 
@@ -47,162 +43,171 @@ class MyPrinter:
         """
         Attempt to export database information to *.docx file.
         """
-        print(f"----------\n{self._utils.timestamp()} creating *.docx file")
+        self.log.info(f'creating *.docx file')
         doc = Document()
         section = doc.sections[0]
         _logo_path = os.path.join(os.path.dirname(__file__), '.resources', 'doc_logo.png')
 
-        # ---------------------------------------------------------------------------------
-        # header and footer
-        # ---------------------------------------------------------------------------------
-        header = section.header
-        header_paragraph = header.paragraphs[0]
-        run = header_paragraph.add_run()
-        run.add_picture(_logo_path, width=Inches(1.0))
-        run.add_text(f" {self._db_name} database technical documentation")
+        try:
+            # ---------------------------------------------------------------------------------
+            # header and footer
+            # ---------------------------------------------------------------------------------
+            header = section.header
+            header_paragraph = header.paragraphs[0]
+            run = header_paragraph.add_run()
+            run.add_picture(_logo_path, width=Inches(1.0))
+            run.add_text(f" {self._db_name} database technical documentation")
 
-        # Add page numbers to each section's footer
-        for section in doc.sections:
-            self._add_page_numbers(section)
+            # Add page numbers to each section's footer
+            for section in doc.sections:
+                self._add_page_numbers(section)
 
-        # ---------------------------------------------------------------------------------
-        # main page
-        # ---------------------------------------------------------------------------------
-        doc.add_heading(f'{self._db_name} database technical documentation', 0)
-        # document details table
-        config = {'header': ['Properties', ''], 'columns': [1, 3]}
-        self._add_table(doc, config, self._properties)
-        # next page
-        doc.add_page_break()
-
-        # ---------------------------------------------------------------------------------
-        # table of contents
-        # ---------------------------------------------------------------------------------
-        doc.add_heading('Table of contents', level=1)
-        toc_paragraph = doc.add_paragraph()
-        toc_paragraph.alignment = WD_PARAGRAPH_ALIGNMENT.CENTER
-        self._add_toc(toc_paragraph)
-        # next page
-        doc.add_page_break()
-
-        # ---------------------------------------------------------------------------------
-        # document purpose
-        # ---------------------------------------------------------------------------------
-        doc.add_heading('1. Document purpose', level=1)
-        doc.add_paragraph(f'Purpose of this document is to provide a technical overview on details and structure of '
-                          f'{self._db_name} database. Document covers configuration of the database itself and '
-                          f'properties of each included table such as:')
-        doc.add_paragraph(f'table columns', style='List Bullet')
-        doc.add_paragraph(f'column types', style='List Bullet')
-        doc.add_paragraph(f'keys', style='List Bullet')
-        doc.add_paragraph(f'Details related to table contents and / or volume are not part o this document due to '
-                          f'their potentially sensitive nature.')
-        # next page
-        doc.add_page_break()
-
-        # ---------------------------------------------------------------------------------
-        # database details
-        # ---------------------------------------------------------------------------------
-        if self._content['db_configuration']:
-            doc.add_heading(f'2. {self._db_name} database details', level=1)
-            doc.add_paragraph(f'This section covers basic configuration details of database.')
-            # for each subject - create content table
-            paragraph = 1
-            for scope in self._db_config:
-                content = self._db_config[scope]
-                doc.add_heading(f"2.{paragraph} {scope}", level=2)
-                # create table
-                # separate formatting for different scope subjects
-                if scope == 'Configuration':
-                    config = {'header': ['Configuration item', 'Value default', 'Value in use'], 'columns': [4, 1, 1]}
-                    self._add_table(doc, config, content)
-                if scope == "Scoped configuration":
-                    config = {'header': ['Configuration item', 'Value'], 'columns': [4, 2]}
-                    self._add_table(doc, config, content)
-                paragraph += 1
+            # ---------------------------------------------------------------------------------
+            # main page
+            # ---------------------------------------------------------------------------------
+            doc.add_heading(f'{self._db_name} database technical documentation', 0)
+            # document details table
+            config = {'header': ['Properties', ''], 'columns': [1, 3]}
+            self._add_table(doc, config, self._properties)
             # next page
             doc.add_page_break()
 
-        # ---------------------------------------------------------------------------------
-        # per-table details
-        # ---------------------------------------------------------------------------------
-        if self._content['db_tables']:
-            doc.add_heading(f'3. {self._db_name} tables', level=1)
-            doc.add_paragraph(f'This section covers basic configuration details of database tables.')
-            # for each subject - create content table
-            paragraph = 1
-            for table in self._db_tables:
-                content = self._db_tables[table]
-                doc.add_heading(f"3.{paragraph} {table}", level=2)
-
-                # section - keys
-                doc.add_heading(f"3.{paragraph}.1 Keys", level=3)
-                if len(content['keys']) == 0:
-                    doc.add_paragraph(f'No keys configured for this table.')
-                else:
-                    config = {'header': ['Key column name', 'Constraint name', 'Constraint type'], 'columns': [2, 2, 2]}
-                    self._add_table(doc, config, content['keys'])
-
-                # section - extended properties
-                doc.add_heading(f"3.{paragraph}.2 Extended properties", level=3)
-                if len(content['extended']) == 0:
-                    doc.add_paragraph(f'No extended properties configured for this table.')
-                else:
-                    config = {'header': ['Property name', 'Property value'], 'columns': [2, 4]}
-                    self._add_table(doc, config, content['extended'])
-
-                # section - columns
-                doc.add_heading(f"3.{paragraph}.3 Columns", level=3)
-                if len(content['columns']) == 0:
-                    doc.add_paragraph(f'No columns configured for this table')
-                else:
-                    config = {'header': ['Column name', 'Data type', 'Max length', 'Nullable'], 'columns': [2, 2, 1, 1]}
-                    self._add_table(doc, config, content['columns'])
-                paragraph += 1
-
+            # ---------------------------------------------------------------------------------
+            # table of contents
+            # ---------------------------------------------------------------------------------
+            doc.add_heading('Table of contents', level=1)
+            toc_paragraph = doc.add_paragraph()
+            toc_paragraph.alignment = WD_PARAGRAPH_ALIGNMENT.CENTER
+            self._add_toc(toc_paragraph)
             # next page
             doc.add_page_break()
 
-        # ---------------------------------------------------------------------------------
-        # stored procedure details
-        # ---------------------------------------------------------------------------------
-        if self._content['db_procedures']:
-            doc.add_heading(f'3. {self._db_name} stored procedures', level=1)
-            doc.add_paragraph(f'This section covers basic configuration details of configured stored procedures.')
-            # for each subject - create content table
-            paragraph = 1
-            for procedure in self._db_procedures:
-                content = self._db_procedures[procedure]
-                doc.add_heading(f"3.{paragraph} {procedure}", level=2)
+            # ---------------------------------------------------------------------------------
+            # document purpose
+            # ---------------------------------------------------------------------------------
+            doc.add_heading('1. Document purpose', level=1)
+            doc.add_paragraph(f'Purpose of this document is to provide a technical overview on details and '
+                              f'structure of {self._db_name} database. Document covers configuration of the database '
+                              f'itself and properties of each included table such as:')
+            doc.add_paragraph(f'table columns', style='List Bullet')
+            doc.add_paragraph(f'column types', style='List Bullet')
+            doc.add_paragraph(f'keys', style='List Bullet')
+            doc.add_paragraph(f'Details related to table contents and / or volume are not part o this document due to '
+                              f'their potentially sensitive nature.')
+            # next page
+            doc.add_page_break()
 
-                # section - extended properties
-                doc.add_heading(f"3.{paragraph}.1 Extended properties", level=3)
-                if not content['extended']:
-                    doc.add_paragraph(f'No extended properties configured for this procedure.')
-                else:
-                    config = {'header': ['Property name', 'Property value'], 'columns': [2, 4]}
-                    self._add_table(doc, config, content['extended'])
+            # ---------------------------------------------------------------------------------
+            # database details
+            # ---------------------------------------------------------------------------------
+            if self._content['db configuration']:
+                doc.add_heading(f'2. {self._db_name} database details', level=1)
+                doc.add_paragraph(f'This section covers basic configuration details of database.')
+                # for each subject - create content table
+                paragraph = 1
+                for scope in self._db_config:
+                    content = self._db_config[scope]
+                    doc.add_heading(f"2.{paragraph} {scope}", level=2)
+                    # create table
+                    # separate formatting for different scope subjects
+                    if scope == 'Configuration':
+                        config = {'header': ['Configuration item', 'Value default', 'Value in use'],
+                                  'columns': [4, 1, 1]}
+                        self._add_table(doc, config, content)
+                    if scope == "Scoped configuration":
+                        config = {'header': ['Configuration item', 'Value'], 'columns': [4, 2]}
+                        self._add_table(doc, config, content)
+                    paragraph += 1
+                # next page
+                doc.add_page_break()
 
-                # section - stored procedure details
-                doc.add_heading(f"3.{paragraph}.2 Details", level=3)
-                if not content['info']:
-                    doc.add_paragraph(f'No properties obtained for this procedure.')
-                else:
-                    config = {'header': ['Property name', 'Property value'], 'columns': [2, 4]}
-                    self._add_table(doc, config, content['info'])
-                paragraph += 1
+            # ---------------------------------------------------------------------------------
+            # per-table details
+            # ---------------------------------------------------------------------------------
+            if self._content['db tables']:
+                doc.add_heading(f'3. {self._db_name} tables', level=1)
+                doc.add_paragraph(f'This section covers basic configuration details of database tables.')
+                # for each subject - create content table
+                paragraph = 1
+                for table in self._db_tables:
+                    content = self._db_tables[table]
+                    doc.add_heading(f"3.{paragraph} {table}", level=2)
 
-        # Save the document
-        path = f"{self._export}\\{self._db_name}_documentation.docx"
-        print(f"{self._utils.timestamp()} Saving file: {path}")
-        doc.save(path)
+                    # section - keys
+                    doc.add_heading(f"3.{paragraph}.1 Keys", level=3)
+                    if len(content['keys']) == 0:
+                        doc.add_paragraph(f'No keys configured for this table.')
+                    else:
+                        config = {'header': ['Key column name', 'Constraint name', 'Constraint type'],
+                                  'columns': [2, 2, 2]}
+                        self._add_table(doc, config, content['keys'])
+
+                    # section - extended properties
+                    doc.add_heading(f"3.{paragraph}.2 Extended properties", level=3)
+                    if len(content['extended']) == 0:
+                        doc.add_paragraph(f'No extended properties configured for this table.')
+                    else:
+                        config = {'header': ['Property name', 'Property value'], 'columns': [2, 4]}
+                        self._add_table(doc, config, content['extended'])
+
+                    # section - columns
+                    doc.add_heading(f"3.{paragraph}.3 Columns", level=3)
+                    if len(content['columns']) == 0:
+                        doc.add_paragraph(f'No columns configured for this table')
+                    else:
+                        config = {'header': ['Column name', 'Data type', 'Max length', 'Nullable'],
+                                  'columns': [2, 2, 1, 1]}
+                        self._add_table(doc, config, content['columns'])
+                    paragraph += 1
+
+                # next page
+                doc.add_page_break()
+
+            # ---------------------------------------------------------------------------------
+            # stored procedure details
+            # ---------------------------------------------------------------------------------
+            if self._content['db procedures']:
+                doc.add_heading(f'3. {self._db_name} stored procedures', level=1)
+                doc.add_paragraph(f'This section covers basic configuration details of configured stored procedures.')
+                # for each subject - create content table
+                paragraph = 1
+                for procedure in self._db_procedures:
+                    content = self._db_procedures[procedure]
+                    doc.add_heading(f"3.{paragraph} {procedure}", level=2)
+
+                    # section - extended properties
+                    doc.add_heading(f"3.{paragraph}.1 Extended properties", level=3)
+                    if not content['extended']:
+                        doc.add_paragraph(f'No extended properties configured for this procedure.')
+                    else:
+                        config = {'header': ['Property name', 'Property value'], 'columns': [2, 4]}
+                        self._add_table(doc, config, content['extended'])
+
+                    # section - stored procedure details
+                    doc.add_heading(f"3.{paragraph}.2 Details", level=3)
+                    if not content['info']:
+                        doc.add_paragraph(f'No properties obtained for this procedure.')
+                    else:
+                        config = {'header': ['Property name', 'Property value'], 'columns': [2, 4]}
+                        self._add_table(doc, config, content['info'])
+                    paragraph += 1
+
+            # Save the document
+            path = f"{self._export}\\{self._db_name}_documentation.docx"
+            self.log.info(f'saving file: {path}')
+            doc.save(path)
+        # always anticipate potential issues
+        except Exception as exc:
+            self.log.error(f'> error with creation of a document: {exc}')
+        return
 
     @staticmethod
-    def _add_toc(paragraph):
+    def _add_toc(paragraph: docx.text.paragraph.Paragraph) -> docx.text.paragraph.Paragraph:
         """
         Build table of content.
+
         :param paragraph: current page paragraph object
-        :type paragraph: doc.add_paragraph()
+        :type paragraph: docx.text.paragraph.Paragraph
         :return: modified paragraph with table of content configuration
         :rtype: doc.add_paragraph()
         """
@@ -229,9 +234,10 @@ class MyPrinter:
         return paragraph
 
     @staticmethod
-    def _add_page_numbers(section):
+    def _add_page_numbers(section: docx.section.Section):
         """
         Method to provide pages numeration.
+
         :param section: document section object
         """
         footer = section.footer
@@ -259,17 +265,18 @@ class MyPrinter:
         footer_text.alignment = WD_PARAGRAPH_ALIGNMENT.CENTER
 
     @staticmethod
-    def _add_table(doc, config, content):
+    def _add_table(doc: docx.Document, config: dict[str, Any], content: list[Any]) -> docx.Document:
         """
         Create table for provided data.
+
         :param doc: python-docx document object
         :param config: table configuration containing header column names and column dimensions list
         :param content: table content list
-        :type doc: docx.Document()
-        :type config: dict(str, any)
-        :type content: list(any)
+        :type doc: docx.Document
+        :type config: dict[str, Any]
+        :type content: list[Any]
         :return: modified document object
-        :rtype: docx.Document()
+        :rtype: docx.Document
         """
         cols = len(config['columns'])
         table = doc.add_table(rows=1, cols=cols)
@@ -287,22 +294,3 @@ class MyPrinter:
                 row[item_id].text = item[item_id]
                 row[item_id].width = Inches(config['columns'][item_id])
         return doc
-
-
-def execute(_details, _core):
-    """
-    Carry document print task.
-    :param _details: MSSQL database details dictionary
-    :param _core: SQDoc script object
-    :type _details: dict(str, any)
-    :type _core: SQDoc()
-    :raise exc: Unspecified fil creation exception
-    """
-    try:
-        MyPrinter(_details, _core)
-        print(f"{_core.utils.timestamp()} Document saved, all activities finished.")
-    except Exception as exc:
-        print(f"{_core.utils.timestamp()} Unspecified exception, check log for details. Exiting...")
-        _core.log.warn(f"Unspecified *.docx file creation exception: {exc}")
-        time.sleep(5)
-        sys.exit(0)
